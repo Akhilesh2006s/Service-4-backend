@@ -5,7 +5,8 @@ Deployment script for GST Billing System
 
 import os
 import sys
-from app import create_app, db
+from app import create_app
+from database import db
 from models import User, Customer, Product, SuperAdmin
 
 def init_database():
@@ -17,16 +18,21 @@ def init_database():
         db.create_all()
         
         # Create super admin if not exists
-        super_admin = SuperAdmin.query.filter_by(email='admin@gstbilling.com').first()
+        super_admin = SuperAdmin.query.filter_by(email='madhavchelluri57@gmail.com').first()
         if not super_admin:
             super_admin = SuperAdmin(
-                email='admin@gstbilling.com',
-                password='admin123'  # Change this in production!
+                email='madhavchelluri57@gmail.com',
+                name='Super Admin'
             )
-            super_admin.set_password('admin123')
+            super_admin.set_password('12345678')
             db.session.add(super_admin)
             db.session.commit()
-            print("✅ Super admin created: admin@gstbilling.com / admin123")
+            print("✅ Super admin created: madhavchelluri57@gmail.com / 12345678")
+        else:
+            # Update password if exists
+            super_admin.set_password('12345678')
+            db.session.commit()
+            print("✅ Super admin password updated: madhavchelluri57@gmail.com / 12345678")
         
         print("✅ Database initialized successfully!")
 

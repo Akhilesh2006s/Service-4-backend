@@ -1,360 +1,465 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, send_file
+from flask import Blueprint, request, jsonify, send_file
 from flask_login import login_required, current_user
-from models import db, Invoice, InvoiceItem, Product, Customer, StockMovement
-from sqlalchemy import func, extract, desc
-from datetime import datetime, date, timedelta
-import calendar
-import json
-from pdf_generator import generate_sales_report_pdf
+from models import db, Order, OrderItem, Customer, Product, Invoice, InvoiceItem
+from datetime import datetime, timedelta
+from sqlalchemy import func, extract, and_
+from collections import defaultdict
+from io import BytesIO
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill
+    OPENPYXL_AVAILABLE = True
+except ImportError:
+    OPENPYXL_AVAILABLE = False
+try:
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib import colors
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
 
 report_bp = Blueprint('report', __name__)
 
-@report_bp.route('/reports')
+@report_bp.route('/api/sales-summary', methods=['GET'])
 @login_required
-def index():
-    """Reports dashboard"""
-    return render_template('reports/index.html')
-
-@report_bp.route('/reports/sales')
-@login_required
-def sales():
-    """Sales report"""
-    report_type = request.args.get('type', 'monthly')
-    month = request.args.get('month', datetime.now().month, type=int)
-    year = request.args.get('year', datetime.now().year, type=int)
-    date_from = request.args.get('date_from', '')
-    date_to = request.args.get('date_to', '')
-    
-    if report_type == 'monthly':
-        # Monthly report
-        invoices = Invoice.query.filter(
-            Invoice.user_id == current_user.id,
-            extract('month', Invoice.invoice_date) == month,
-            extract('year', Invoice.invoice_date) == year,
-            Invoice.status == 'paid'
-        ).all()
-    else:
-        # Date range report
-        if not date_from or not date_to:
-            flash('Please select date range', 'error')
-            return render_template('reports/sales.html', invoices=[], report_type=report_type)
+def sales_summary():
+    """Get sales summary with revenue, orders, customers"""
+    try:
+        # Get date range (default: last 30 days)
+        days = request.args.get('days', 30, type=int)
+        start_date = datetime.now() - timedelta(days=days)
         
-        start_date = datetime.strptime(date_from, '%Y-%m-%d').date()
-        end_date = datetime.strptime(date_to, '%Y-%m-%d').date()
+        # Total revenue from orders
+        total_revenue = db.session.query(func.sum(Order.total_amount)).filter(
+            Order.created_at >= start_date
+        ).scalar() or 0.0
         
-        invoices = Invoice.query.filter(
-            Invoice.user_id == current_user.id,
-            Invoice.invoice_date >= start_date,
-            Invoice.invoice_date <= end_date,
-            Invoice.status == 'paid'
-        ).all()
-    
-    # Calculate totals
-    total_sales = sum(invoice.total_amount for invoice in invoices)
-    total_invoices = len(invoices)
-    total_gst = sum(invoice.cgst_amount + invoice.sgst_amount + invoice.igst_amount for invoice in invoices)
-    
-    # Top customers
-    customer_sales = {}
-    for invoice in invoices:
-        customer_name = invoice.customer.name
-        if customer_name not in customer_sales:
-            customer_sales[customer_name] = 0
-        customer_sales[customer_name] += invoice.total_amount
-    
-    top_customers = sorted(customer_sales.items(), key=lambda x: x[1], reverse=True)[:10]
-    
-    # Top products
-    product_sales = {}
-    for invoice in invoices:
-        for item in invoice.items:
-            product_name = item.product.name
-            if product_name not in product_sales:
-                product_sales[product_name] = {'quantity': 0, 'amount': 0}
-            product_sales[product_name]['quantity'] += item.quantity
-            product_sales[product_name]['amount'] += item.total
-    
-    top_products = sorted(product_sales.items(), key=lambda x: x[1]['amount'], reverse=True)[:10]
-    
-    return render_template('reports/sales.html',
-                         invoices=invoices,
-                         total_sales=total_sales,
-                         total_invoices=total_invoices,
-                         total_gst=total_gst,
-                         top_customers=top_customers,
-                         top_products=top_products,
-                         report_type=report_type,
-                         month=month,
-                         year=year,
-                         date_from=date_from,
-                         date_to=date_to)
-
-@report_bp.route('/reports/inventory')
-@login_required
-def inventory():
-    """Inventory report"""
-    products = Product.query.filter_by(
-        user_id=current_user.id,
-        is_active=True
-    ).order_by(Product.name).all()
-    
-    # Calculate inventory summary
-    total_products = len(products)
-    total_value = sum(p.stock_quantity * p.price for p in products)
-    low_stock_count = len([p for p in products if p.is_low_stock])
-    out_of_stock_count = len([p for p in products if p.stock_quantity == 0])
-    
-    # Get recent stock movements
-    recent_movements = StockMovement.query.join(Product).filter(
-        Product.user_id == current_user.id
-    ).order_by(desc(StockMovement.created_at)).limit(20).all()
-    
-    # Stock movement summary
-    movement_summary = db.session.query(
-        StockMovement.movement_type,
-        func.sum(StockMovement.quantity).label('total_quantity')
-    ).join(Product).filter(
-        Product.user_id == current_user.id,
-        StockMovement.created_at >= datetime.now() - timedelta(days=30)
-    ).group_by(StockMovement.movement_type).all()
-    
-    return render_template('reports/inventory.html',
-                         products=products,
-                         total_products=total_products,
-                         total_value=total_value,
-                         low_stock_count=low_stock_count,
-                         out_of_stock_count=out_of_stock_count,
-                         recent_movements=recent_movements,
-                         movement_summary=movement_summary)
-
-@report_bp.route('/reports/customers')
-@login_required
-def customers():
-    """Customer report"""
-    customers = Customer.query.filter_by(
-        user_id=current_user.id,
-        is_active=True
-    ).all()
-    
-    # Calculate customer statistics
-    customer_stats = []
-    for customer in customers:
-        invoices = customer.invoices
-        total_purchases = sum(invoice.total_amount for invoice in invoices if invoice.status == 'paid')
-        total_invoices = len([invoice for invoice in invoices if invoice.status == 'paid'])
-        last_purchase = max([invoice.invoice_date for invoice in invoices if invoice.status == 'paid']) if invoices else None
+        # Total orders
+        total_orders = Order.query.filter(
+            Order.created_at >= start_date
+        ).count()
         
-        customer_stats.append({
-            'customer': customer,
-            'total_purchases': total_purchases,
-            'total_invoices': total_invoices,
-            'last_purchase': last_purchase,
-            'average_order': total_purchases / total_invoices if total_invoices > 0 else 0
-        })
-    
-    # Sort by total purchases
-    customer_stats.sort(key=lambda x: x['total_purchases'], reverse=True)
-    
-    return render_template('reports/customers.html', customer_stats=customer_stats)
-
-@report_bp.route('/reports/products')
-@login_required
-def products():
-    """Product performance report"""
-    products = Product.query.filter_by(
-        user_id=current_user.id,
-        is_active=True
-    ).all()
-    
-    # Calculate product performance
-    product_stats = []
-    for product in products:
-        # Get sales data for last 30 days
-        thirty_days_ago = datetime.now() - timedelta(days=30)
+        # Total customers
+        total_customers = Customer.query.count()
         
-        sales_data = db.session.query(
-            func.sum(InvoiceItem.quantity).label('total_sold'),
-            func.sum(InvoiceItem.total).label('total_revenue'),
-            func.count(InvoiceItem.id).label('times_sold')
-        ).join(Invoice).filter(
-            InvoiceItem.product_id == product.id,
-            Invoice.user_id == current_user.id,
-            Invoice.invoice_date >= thirty_days_ago,
-            Invoice.status == 'paid'
-        ).first()
-        
-        # Get stock movements
-        movements = StockMovement.query.filter_by(product_id=product.id).all()
-        stock_in = sum(m.quantity for m in movements if m.movement_type == 'in')
-        stock_out = sum(m.quantity for m in movements if m.movement_type == 'out')
-        
-        product_stats.append({
-            'product': product,
-            'total_sold': sales_data.total_sold or 0,
-            'total_revenue': sales_data.total_revenue or 0,
-            'times_sold': sales_data.times_sold or 0,
-            'stock_in': stock_in,
-            'stock_out': stock_out,
-            'current_stock': product.stock_quantity,
-            'stock_value': product.stock_quantity * product.price
-        })
-    
-    # Sort by revenue
-    product_stats.sort(key=lambda x: x['total_revenue'], reverse=True)
-    
-    return render_template('reports/products.html', product_stats=product_stats)
-
-@report_bp.route('/reports/analytics')
-@login_required
-def analytics():
-    """Business analytics"""
-    # Sales trend for last 12 months
-    sales_trend = []
-    for i in range(12):
-        month = datetime.now().month - i
-        year = datetime.now().year
-        if month <= 0:
-            month += 12
-            year -= 1
-        
-        sales = db.session.query(
-            func.sum(Invoice.total_amount).label('total_sales')
-        ).filter(
-            Invoice.user_id == current_user.id,
-            extract('month', Invoice.invoice_date) == month,
-            extract('year', Invoice.invoice_date) == year,
-            Invoice.status == 'paid'
+        # Active customers (placed orders in period)
+        active_customers = db.session.query(func.count(func.distinct(Order.customer_id))).filter(
+            Order.created_at >= start_date
         ).scalar() or 0
         
-        sales_trend.append({
-            'month': calendar.month_abbr[month],
-            'sales': float(sales)
-        })
-    
-    sales_trend.reverse()
-    
-    # Top performing metrics
-    # Best selling product
-    best_product = db.session.query(
-        Product.name,
-        func.sum(InvoiceItem.quantity).label('total_sold')
-    ).join(InvoiceItem).join(Invoice).filter(
-        Invoice.user_id == current_user.id,
-        Invoice.status == 'paid'
-    ).group_by(Product.id, Product.name).order_by(
-        desc(func.sum(InvoiceItem.quantity))
-    ).first()
-    
-    # Best customer
-    best_customer = db.session.query(
-        Customer.name,
-        func.sum(Invoice.total_amount).label('total_spent')
-    ).join(Invoice).filter(
-        Invoice.user_id == current_user.id,
-        Invoice.status == 'paid'
-    ).group_by(Customer.id, Customer.name).order_by(
-        desc(func.sum(Invoice.total_amount))
-    ).first()
-    
-    # Monthly growth
-    current_month_sales = db.session.query(
-        func.sum(Invoice.total_amount).label('total_sales')
-    ).filter(
-        Invoice.user_id == current_user.id,
-        extract('month', Invoice.invoice_date) == datetime.now().month,
-        extract('year', Invoice.invoice_date) == datetime.now().year,
-        Invoice.status == 'paid'
-    ).scalar() or 0
-    
-    last_month_sales = db.session.query(
-        func.sum(Invoice.total_amount).label('total_sales')
-    ).filter(
-        Invoice.user_id == current_user.id,
-        extract('month', Invoice.invoice_date) == datetime.now().month - 1,
-        extract('year', Invoice.invoice_date) == datetime.now().year,
-        Invoice.status == 'paid'
-    ).scalar() or 0
-    
-    growth_percentage = ((current_month_sales - last_month_sales) / last_month_sales * 100) if last_month_sales > 0 else 0
-    
-    return render_template('reports/analytics.html',
-                         sales_trend=sales_trend,
-                         best_product=best_product,
-                         best_customer=best_customer,
-                         current_month_sales=current_month_sales,
-                         last_month_sales=last_month_sales,
-                         growth_percentage=growth_percentage)
-
-@report_bp.route('/reports/export/<report_type>')
-@login_required
-def export_report(report_type):
-    """Export report as PDF"""
-    if report_type == 'sales':
-        month = request.args.get('month', datetime.now().month, type=int)
-        year = request.args.get('year', datetime.now().year, type=int)
+        # Average order value
+        avg_order_value = total_revenue / total_orders if total_orders > 0 else 0
         
-        invoices = Invoice.query.filter(
-            Invoice.user_id == current_user.id,
-            extract('month', Invoice.invoice_date) == month,
-            extract('year', Invoice.invoice_date) == year,
-            Invoice.status == 'paid'
+        # Orders by status
+        orders_by_status = db.session.query(
+            Order.status,
+            func.count(Order.id),
+            func.sum(Order.total_amount)
+        ).filter(
+            Order.created_at >= start_date
+        ).group_by(Order.status).all()
+        
+        status_breakdown = {
+            status: {
+                'count': count,
+                'revenue': float(revenue or 0)
+            }
+            for status, count, revenue in orders_by_status
+        }
+        
+        return jsonify({
+            'success': True,
+            'summary': {
+                'total_revenue': float(total_revenue),
+                'total_orders': total_orders,
+                'total_customers': total_customers,
+                'active_customers': active_customers,
+                'avg_order_value': float(avg_order_value),
+                'status_breakdown': status_breakdown
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@report_bp.route('/api/sales-trends', methods=['GET'])
+@login_required
+def sales_trends():
+    """Get sales trends over time (daily, weekly, monthly)"""
+    try:
+        period = request.args.get('period', 'daily')  # daily, weekly, monthly
+        days = request.args.get('days', 30, type=int)
+        start_date = datetime.now() - timedelta(days=days)
+        
+        query = Order.query.filter(Order.created_at >= start_date)
+        
+        if period == 'daily':
+            # Group by day
+            trends = db.session.query(
+                func.date(Order.created_at).label('date'),
+                func.count(Order.id).label('orders'),
+                func.sum(Order.total_amount).label('revenue')
+            ).filter(
+                Order.created_at >= start_date
+            ).group_by(func.date(Order.created_at)).order_by('date').all()
+            
+            data = [{
+                'date': str(trend.date),
+                'orders': trend.orders,
+                'revenue': float(trend.revenue or 0)
+            } for trend in trends]
+            
+        elif period == 'weekly':
+            # Group by week
+            trends = db.session.query(
+                extract('year', Order.created_at).label('year'),
+                extract('week', Order.created_at).label('week'),
+                func.count(Order.id).label('orders'),
+                func.sum(Order.total_amount).label('revenue')
+            ).filter(
+                Order.created_at >= start_date
+            ).group_by('year', 'week').order_by('year', 'week').all()
+            
+            data = [{
+                'period': f"Week {trend.week}, {int(trend.year)}",
+                'orders': trend.orders,
+                'revenue': float(trend.revenue or 0)
+            } for trend in trends]
+            
+        else:  # monthly
+            # Group by month
+            trends = db.session.query(
+                extract('year', Order.created_at).label('year'),
+                extract('month', Order.created_at).label('month'),
+                func.count(Order.id).label('orders'),
+                func.sum(Order.total_amount).label('revenue')
+            ).filter(
+                Order.created_at >= start_date
+            ).group_by('year', 'month').order_by('year', 'month').all()
+            
+            data = [{
+                'period': f"{int(trend.month)}/{int(trend.year)}",
+                'orders': trend.orders,
+                'revenue': float(trend.revenue or 0)
+            } for trend in trends]
+        
+        return jsonify({
+            'success': True,
+            'period': period,
+            'data': data
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@report_bp.route('/api/top-customers', methods=['GET'])
+@login_required
+def top_customers():
+    """Get top customers by revenue"""
+    try:
+        limit = request.args.get('limit', 10, type=int)
+        days = request.args.get('days', 30, type=int)
+        start_date = datetime.now() - timedelta(days=days)
+        
+        top_customers = db.session.query(
+            Customer.id,
+            Customer.name,
+            Customer.email,
+            func.count(Order.id).label('order_count'),
+            func.sum(Order.total_amount).label('total_spent')
+        ).join(Order).filter(
+            Order.created_at >= start_date
+        ).group_by(Customer.id, Customer.name, Customer.email).order_by(
+            func.sum(Order.total_amount).desc()
+        ).limit(limit).all()
+        
+        customers_data = [{
+            'id': customer.id,
+            'name': customer.name,
+            'email': customer.email,
+            'order_count': customer.order_count,
+            'total_spent': float(customer.total_spent or 0)
+        } for customer in top_customers]
+        
+        return jsonify({
+            'success': True,
+            'customers': customers_data
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@report_bp.route('/api/top-products', methods=['GET'])
+@login_required
+def top_products():
+    """Get top products by quantity sold"""
+    try:
+        limit = request.args.get('limit', 10, type=int)
+        days = request.args.get('days', 30, type=int)
+        start_date = datetime.now() - timedelta(days=days)
+        
+        top_products = db.session.query(
+            Product.id,
+            Product.name,
+            Product.sku,
+            func.sum(OrderItem.quantity).label('quantity_sold'),
+            func.sum(OrderItem.total).label('revenue')
+        ).join(OrderItem).join(Order).filter(
+            Order.created_at >= start_date
+        ).group_by(Product.id, Product.name, Product.sku).order_by(
+            func.sum(OrderItem.quantity).desc()
+        ).limit(limit).all()
+        
+        products_data = [{
+            'id': product.id,
+            'name': product.name,
+            'sku': product.sku,
+            'quantity_sold': int(product.quantity_sold or 0),
+            'revenue': float(product.revenue or 0)
+        } for product in top_products]
+        
+        return jsonify({
+            'success': True,
+            'products': products_data
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@report_bp.route('/revenue-by-category', methods=['GET'])
+@login_required
+def revenue_by_category():
+    """Get revenue breakdown by product category"""
+    try:
+        days = request.args.get('days', 30, type=int)
+        start_date = datetime.now() - timedelta(days=days)
+        
+        category_revenue = db.session.query(
+            Product.category,
+            func.sum(OrderItem.total).label('revenue'),
+            func.sum(OrderItem.quantity).label('quantity')
+        ).join(OrderItem).join(Order).filter(
+            Order.created_at >= start_date,
+            Product.category.isnot(None),
+            Product.category != ''
+        ).group_by(Product.category).order_by(
+            func.sum(OrderItem.total).desc()
         ).all()
         
-        pdf_path = generate_sales_report_pdf(invoices, month, year)
+        data = [{
+            'category': cat or 'Uncategorized',
+            'revenue': float(revenue or 0),
+            'quantity': int(quantity or 0)
+        } for cat, revenue, quantity in category_revenue]
         
-        return send_file(
-            pdf_path,
-            as_attachment=True,
-            download_name=f'sales_report_{month:02d}_{year}.pdf',
-            mimetype='application/pdf'
-        )
-    
-    flash('Invalid report type', 'error')
-    return redirect(url_for('report.index'))
-
-@report_bp.route('/api/reports/sales-data')
-@login_required
-def sales_data():
-    """API endpoint for sales chart data"""
-    days = request.args.get('days', 30, type=int)
-    start_date = datetime.now() - timedelta(days=days)
-    
-    # Get daily sales data
-    daily_sales = db.session.query(
-        func.date(Invoice.invoice_date).label('date'),
-        func.sum(Invoice.total_amount).label('sales')
-    ).filter(
-        Invoice.user_id == current_user.id,
-        Invoice.invoice_date >= start_date,
-        Invoice.status == 'paid'
-    ).group_by(func.date(Invoice.invoice_date)).all()
-    
-    # Format data for chart
-    chart_data = []
-    for sale in daily_sales:
-        chart_data.append({
-            'date': sale.date.strftime('%Y-%m-%d'),
-            'sales': float(sale.sales)
+        return jsonify({
+            'success': True,
+            'data': data
         })
-    
-    return jsonify(chart_data)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
-@report_bp.route('/api/reports/inventory-data')
+@report_bp.route('/customer-growth', methods=['GET'])
 @login_required
-def inventory_data():
-    """API endpoint for inventory chart data"""
-    products = Product.query.filter_by(
-        user_id=current_user.id,
-        is_active=True
-    ).all()
-    
-    chart_data = []
-    for product in products:
-        chart_data.append({
-            'name': product.name,
-            'stock_quantity': product.stock_quantity,
-            'stock_value': float(product.stock_quantity * product.price)
+def customer_growth():
+    """Get customer growth over time"""
+    try:
+        days = request.args.get('days', 90, type=int)
+        start_date = datetime.now() - timedelta(days=days)
+        
+        growth = db.session.query(
+            func.date(Customer.created_at).label('date'),
+            func.count(Customer.id).label('new_customers')
+        ).filter(
+            Customer.created_at >= start_date
+        ).group_by(func.date(Customer.created_at)).order_by('date').all()
+        
+        data = [{
+            'date': str(g.date),
+            'new_customers': g.new_customers
+        } for g in growth]
+        
+        return jsonify({
+            'success': True,
+            'data': data
         })
-    
-    return jsonify(chart_data)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
+@report_bp.route('/api/download', methods=['GET'])
+@login_required
+def download_report():
+    """Download reports as PDF or Excel"""
+    try:
+        format_type = request.args.get('format', 'excel')  # 'excel' or 'pdf'
+        report_type = request.args.get('type', 'summary')  # 'summary', 'customers', 'products', 'trends'
+        days = request.args.get('days', 30, type=int)
+        start_date = datetime.now() - timedelta(days=days)
+        
+        if format_type == 'excel' and OPENPYXL_AVAILABLE:
+            wb = Workbook()
+            
+            if report_type == 'summary':
+                ws = wb.active
+                ws.title = "Sales Summary"
+                
+                # Get summary data
+                total_revenue = db.session.query(func.sum(Order.total_amount)).filter(
+                    Order.created_at >= start_date
+                ).scalar() or 0.0
+                total_orders = Order.query.filter(Order.created_at >= start_date).count()
+                total_customers = Customer.query.count()
+                active_customers = db.session.query(func.count(func.distinct(Order.customer_id))).filter(
+                    Order.created_at >= start_date
+                ).scalar() or 0
+                
+                # Write summary
+                ws['A1'] = 'Sales Summary Report'
+                ws['A1'].font = Font(bold=True, size=16)
+                ws['A2'] = f'Period: Last {days} days'
+                ws['A2'].font = Font(bold=True)
+                
+                ws['A4'] = 'Metric'
+                ws['B4'] = 'Value'
+                ws['A4'].font = Font(bold=True)
+                ws['B4'].font = Font(bold=True)
+                
+                ws['A5'] = 'Total Revenue'
+                ws['B5'] = float(total_revenue)
+                ws['A6'] = 'Total Orders'
+                ws['B6'] = total_orders
+                ws['A7'] = 'Total Customers'
+                ws['B7'] = total_customers
+                ws['A8'] = 'Active Customers'
+                ws['B8'] = active_customers
+                
+            elif report_type == 'customers':
+                ws = wb.active
+                ws.title = "Top Customers"
+                
+                limit = request.args.get('limit', 50, type=int)
+                top = db.session.query(
+                    Customer.id, Customer.name, Customer.email,
+                    func.count(Order.id).label('order_count'),
+                    func.sum(Order.total_amount).label('total_spent')
+                ).join(Order).filter(Order.created_at >= start_date).group_by(
+                    Customer.id, Customer.name, Customer.email
+                ).order_by(func.sum(Order.total_amount).desc()).limit(limit).all()
+                
+                headers = ['Rank', 'Customer Name', 'Email', 'Orders', 'Total Spent']
+                for col_num, header in enumerate(headers, 1):
+                    cell = ws.cell(row=1, column=col_num, value=header)
+                    cell.font = Font(bold=True)
+                    cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+                    cell.font = Font(bold=True, color="FFFFFF")
+                
+                for row_num, customer in enumerate(top, 2):
+                    ws.cell(row=row_num, column=1, value=row_num - 1)
+                    ws.cell(row=row_num, column=2, value=customer.name)
+                    ws.cell(row=row_num, column=3, value=customer.email)
+                    ws.cell(row=row_num, column=4, value=customer.order_count)
+                    ws.cell(row=row_num, column=5, value=float(customer.total_spent or 0))
+                    
+            elif report_type == 'products':
+                ws = wb.active
+                ws.title = "Top Products"
+                
+                limit = request.args.get('limit', 50, type=int)
+                top = db.session.query(
+                    Product.id, Product.name, Product.sku,
+                    func.sum(OrderItem.quantity).label('quantity_sold'),
+                    func.sum(OrderItem.total).label('revenue')
+                ).join(OrderItem).join(Order).filter(
+                    Order.created_at >= start_date
+                ).group_by(Product.id, Product.name, Product.sku).order_by(
+                    func.sum(OrderItem.quantity).desc()
+                ).limit(limit).all()
+                
+                headers = ['Rank', 'Product Name', 'SKU', 'Quantity Sold', 'Revenue']
+                for col_num, header in enumerate(headers, 1):
+                    cell = ws.cell(row=1, column=col_num, value=header)
+                    cell.font = Font(bold=True)
+                    cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+                    cell.font = Font(bold=True, color="FFFFFF")
+                
+                for row_num, product in enumerate(top, 2):
+                    ws.cell(row=row_num, column=1, value=row_num - 1)
+                    ws.cell(row=row_num, column=2, value=product.name)
+                    ws.cell(row=row_num, column=3, value=product.sku)
+                    ws.cell(row=row_num, column=4, value=int(product.quantity_sold or 0))
+                    ws.cell(row=row_num, column=5, value=float(product.revenue or 0))
+            
+            # Auto-adjust column widths
+            for column in ws.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 50)
+                ws.column_dimensions[column_letter].width = adjusted_width
+            
+            output = BytesIO()
+            wb.save(output)
+            output.seek(0)
+            
+            return send_file(
+                output,
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                as_attachment=True,
+                download_name=f'report_{report_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+            )
+        else:
+            # PDF export (if reportlab available)
+            if REPORTLAB_AVAILABLE:
+                buffer = BytesIO()
+                doc = SimpleDocTemplate(buffer, pagesize=A4)
+                elements = []
+                styles = getSampleStyleSheet()
+                
+                # Title
+                title = Paragraph(f"Sales Report - Last {days} days", styles['Title'])
+                elements.append(title)
+                elements.append(Spacer(1, 12))
+                
+                # Get summary data
+                total_revenue = db.session.query(func.sum(Order.total_amount)).filter(
+                    Order.created_at >= start_date
+                ).scalar() or 0.0
+                total_orders = Order.query.filter(Order.created_at >= start_date).count()
+                
+                # Summary table
+                data = [['Metric', 'Value']]
+                data.append(['Total Revenue', f'₹{total_revenue:,.2f}'])
+                data.append(['Total Orders', str(total_orders)])
+                
+                table = Table(data)
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 14),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                ]))
+                elements.append(table)
+                
+                doc.build(elements)
+                buffer.seek(0)
+                
+                return send_file(
+                    buffer,
+                    mimetype='application/pdf',
+                    as_attachment=True,
+                    download_name=f'report_{report_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+                )
+            else:
+                return jsonify({'success': False, 'error': 'PDF export not available'}), 500
+                
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500

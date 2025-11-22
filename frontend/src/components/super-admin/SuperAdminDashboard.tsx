@@ -46,11 +46,29 @@ const SuperAdminDashboard: React.FC = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const response = await fetch('/api/super-admin/dashboard', {
+      // Get stored user data
+      const userData = localStorage.getItem('userData');
+      const userType = localStorage.getItem('userType');
+      
+      if (!userData || userType !== 'super_admin') {
+        // Redirect to login if not authenticated
+        navigate('/login');
+        return;
+      }
+      
+      const response = await fetch('https://web-production-84a3.up.railway.app/api/super-admin/dashboard', {
         credentials: 'include'
       });
       
       if (!response.ok) {
+        if (response.status === 401) {
+          // Unauthorized - clear storage and redirect to login
+          localStorage.removeItem('isAuthenticated');
+          localStorage.removeItem('userType');
+          localStorage.removeItem('userData');
+          navigate('/login');
+          return;
+        }
         throw new Error('Failed to fetch dashboard data');
       }
       
@@ -74,7 +92,7 @@ const SuperAdminDashboard: React.FC = () => {
   const handleApprove = async (adminId: number) => {
     setProcessingAction(adminId);
     try {
-      const response = await fetch(`/api/super-admin/approve-admin/${adminId}`, {
+      const response = await fetch(`https://web-production-84a3.up.railway.app/api/super-admin/approve-admin/${adminId}`, {
         method: 'POST',
         credentials: 'include'
       });
@@ -100,7 +118,7 @@ const SuperAdminDashboard: React.FC = () => {
     
     setProcessingAction(adminId);
     try {
-      const response = await fetch(`/api/super-admin/reject-admin/${adminId}`, {
+      const response = await fetch(`https://web-production-84a3.up.railway.app/api/super-admin/reject-admin/${adminId}`, {
         method: 'POST',
         credentials: 'include'
       });
@@ -121,12 +139,25 @@ const SuperAdminDashboard: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/super-admin/logout', {
+      // Clear local storage
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('userType');
+      localStorage.removeItem('userData');
+      
+      // Call logout endpoint
+      await fetch('https://web-production-84a3.up.railway.app/api/super-admin/logout', {
+        method: 'POST',
         credentials: 'include'
       });
+      
+      // Navigate to login
       navigate('/login');
     } catch (err) {
       console.error('Error logging out:', err);
+      // Even if logout fails, clear local storage and navigate
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('userType');
+      localStorage.removeItem('userData');
       navigate('/login');
     }
   };

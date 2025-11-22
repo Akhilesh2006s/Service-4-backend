@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import LoginPage from './components/auth/LoginPage';
+import Auth from './components/auth/Auth';
 import Dashboard from './components/Dashboard';
-import SuperAdminDashboard from './components/super-admin/SuperAdminDashboard';
+import API_BASE_URL from './config/api';
 
 // Import existing components
 import Products from './components/products/Products';
@@ -15,19 +15,74 @@ import InvoiceDetail from './components/invoices/InvoiceDetail';
 
 // Import new components
 import Customers from './components/customers/Customers';
+import CustomerDetail from './components/customers/CustomerDetail';
+import CustomerEdit from './components/customers/CustomerEdit';
 import CustomerDashboard from './components/customer/CustomerDashboard';
 import Orders from './components/orders/Orders';
+import Reports from './components/reports/Reports';
+import Sales from './components/sales/Sales';
 
 const App: React.FC = () => {
-  const [userType, setUserType] = useState<'admin' | 'customer' | 'super_admin' | null>(null);
+  const [userType, setUserType] = useState<'admin' | 'customer' | null>(null);
 
-  const handleLogin = (type: 'admin' | 'customer' | 'super_admin') => {
+  const handleLogin = (type: 'admin' | 'customer') => {
     setUserType(type);
+    // Store user type in localStorage for persistence
+    localStorage.setItem('userType', type);
   };
 
   const handleLogout = () => {
     setUserType(null);
+    localStorage.removeItem('userType');
+    localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('userData');
+    // Also call logout endpoint to clear server session
+    fetch(`${API_BASE_URL}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include'
+    }).catch(() => {}); // Ignore errors
   };
+
+  // Check for stored user type on app load
+  useEffect(() => {
+    const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
+    const storedUserType = localStorage.getItem('userType') as 'admin' | 'customer' | null;
+    
+    if (isAuthenticated && storedUserType) {
+      // Verify authentication with backend
+      const checkEndpoint = storedUserType === 'admin' 
+        ? `${API_BASE_URL}/auth/check`
+        : `${API_BASE_URL}/customer-auth/profile`;
+      
+      fetch(checkEndpoint, {
+        credentials: 'include'
+      })
+      .then(response => {
+        if (response.ok) {
+          setUserType(storedUserType);
+        } else {
+          // Clear stale data if backend says not authenticated
+          localStorage.removeItem('isAuthenticated');
+          localStorage.removeItem('userType');
+          localStorage.removeItem('userData');
+          setUserType(null);
+        }
+      })
+      .catch(() => {
+        // Clear stale data on error
+        localStorage.removeItem('isAuthenticated');
+        localStorage.removeItem('userType');
+        localStorage.removeItem('userData');
+        setUserType(null);
+      });
+    } else {
+      // Clear any stale data
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('userType');
+      localStorage.removeItem('userData');
+      setUserType(null);
+    }
+  }, []);
 
   return (
     <Router>
@@ -38,10 +93,9 @@ const App: React.FC = () => {
             path="/" 
             element={
               !userType ? (
-                <LoginPage onLogin={handleLogin} />
+                <Auth onLogin={handleLogin} />
               ) : (
                 <Navigate to={
-                  userType === 'super_admin' ? '/super-admin-dashboard' :
                   userType === 'customer' ? '/customer-dashboard' :
                   '/dashboard'
                 } />
@@ -52,10 +106,9 @@ const App: React.FC = () => {
             path="/login" 
             element={
               !userType ? (
-                <LoginPage onLogin={handleLogin} />
+                <Auth onLogin={handleLogin} />
               ) : (
                 <Navigate to={
-                  userType === 'super_admin' ? '/super-admin-dashboard' :
                   userType === 'customer' ? '/customer-dashboard' :
                   '/dashboard'
                 } />
@@ -140,6 +193,26 @@ const App: React.FC = () => {
               )
             } 
           />
+          <Route 
+            path="/customers/:id" 
+            element={
+              userType === 'admin' ? (
+                <CustomerDetail />
+              ) : (
+                <Navigate to="/login" />
+              )
+            } 
+          />
+          <Route 
+            path="/customers/:id/edit" 
+            element={
+              userType === 'admin' ? (
+                <CustomerEdit />
+              ) : (
+                <Navigate to="/login" />
+              )
+            } 
+          />
 
           {/* Orders Routes */}
           <Route 
@@ -147,6 +220,30 @@ const App: React.FC = () => {
             element={
               userType === 'admin' ? (
                 <Orders />
+              ) : (
+                <Navigate to="/login" />
+              )
+            } 
+          />
+
+          {/* Reports Routes */}
+          <Route 
+            path="/reports" 
+            element={
+              userType === 'admin' ? (
+                <Reports />
+              ) : (
+                <Navigate to="/login" />
+              )
+            } 
+          />
+
+          {/* Sales Routes */}
+          <Route 
+            path="/sales" 
+            element={
+              userType === 'admin' ? (
+                <Sales />
               ) : (
                 <Navigate to="/login" />
               )
@@ -195,18 +292,6 @@ const App: React.FC = () => {
             } 
           />
 
-          {/* Super Admin Routes */}
-          <Route 
-            path="/super-admin-dashboard" 
-            element={
-              userType === 'super_admin' ? (
-                <SuperAdminDashboard />
-              ) : (
-                <Navigate to="/login" />
-              )
-            } 
-          />
-
           {/* Customer Routes */}
           <Route 
             path="/customer-dashboard" 
@@ -218,6 +303,7 @@ const App: React.FC = () => {
               )
             } 
           />
+
 
           {/* Test route to check if styling is working */}
           <Route 

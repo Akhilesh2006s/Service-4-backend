@@ -366,7 +366,26 @@ def calculate_invoice():
 def get_invoices():
     """Get all invoices for the current admin"""
     try:
-        invoices = Invoice.query.filter_by(user_id=current_user.id).order_by(Invoice.created_at.desc()).all()
+        # Check if user is authenticated
+        if not current_user or not hasattr(current_user, 'id'):
+            return jsonify({'success': False, 'error': 'User not authenticated'}), 401
+        
+        user_id = current_user.id
+        customer_id = request.args.get('customer_id', type=int)
+        
+        # Build query
+        query = Invoice.query.filter_by(user_id=user_id)
+        
+        # Filter by customer if customer_id is provided
+        if customer_id:
+            query = query.filter(Invoice.customer_id == customer_id)
+        
+        # Order by created_at, falling back to id if created_at is None
+        try:
+            invoices = query.order_by(desc(Invoice.created_at)).all()
+        except Exception:
+            # Fallback to id if created_at causes issues
+            invoices = query.order_by(desc(Invoice.id)).all()
         invoices_data = []
         
         for invoice in invoices:
@@ -376,10 +395,12 @@ def get_invoices():
             # Get invoice items
             items_data = []
             for item in invoice.items:
+                product = item.product if item.product else None
                 items_data.append({
                     'id': item.id,
                     'product_id': item.product_id,
-                    'product_name': item.product.name if item.product else 'Unknown Product',
+                    'product_name': product.name if product else 'Unknown Product',
+                    'product_name_hindi': product.vegetable_name_hindi if product and hasattr(product, 'vegetable_name_hindi') else None,
                     'quantity': item.quantity,
                     'unit_price': float(item.unit_price),
                     'gst_rate': float(item.gst_rate),
@@ -396,23 +417,30 @@ def get_invoices():
                 'customer_phone': customer.phone if customer else '',
                 'invoice_date': invoice.invoice_date.isoformat() if invoice.invoice_date else '',
                 'due_date': invoice.due_date.isoformat() if invoice.due_date else '',
-                'status': invoice.status,
-                'subtotal': float(invoice.subtotal),
-                'cgst_amount': float(invoice.cgst_amount),
-                'sgst_amount': float(invoice.sgst_amount),
-                'igst_amount': float(invoice.igst_amount),
-                'total_amount': float(invoice.total_amount),
-                'notes': invoice.notes,
+                'status': invoice.status or 'pending',
+                'subtotal': float(invoice.subtotal) if invoice.subtotal is not None else 0.0,
+                'cgst_amount': float(invoice.cgst_amount) if invoice.cgst_amount is not None else 0.0,
+                'sgst_amount': float(invoice.sgst_amount) if invoice.sgst_amount is not None else 0.0,
+                'igst_amount': float(invoice.igst_amount) if invoice.igst_amount is not None else 0.0,
+                'total_amount': float(invoice.total_amount) if invoice.total_amount is not None else 0.0,
+                'notes': invoice.notes or '',
                 'items': items_data,
                 'order_id': invoice.order_id,  # Link to order if generated from order
-                'created_at': invoice.created_at.isoformat()
+                'created_at': invoice.created_at.isoformat() if invoice.created_at else datetime.utcnow().isoformat()
             })
         
         return jsonify({'success': True, 'invoices': invoices_data})
     
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
         print(f"Error getting invoices: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f"Full traceback:\n{error_trace}")
+        return jsonify({
+            'success': False, 
+            'error': str(e),
+            'message': f'Failed to load invoices: {str(e)}'
+        }), 500
 
 @invoice_bp.route('/customer-invoices', methods=['GET'])
 @login_required
@@ -422,7 +450,12 @@ def get_customer_invoices():
         # Assuming current_user is an admin or has access to all customers
         # For simplicity, let's assume current_user.customers contains all customer IDs
         # In a real app, this would be filtered by current_user.customers
-        all_invoices = Invoice.query.filter_by(user_id=current_user.id).order_by(Invoice.created_at.desc()).all()
+        # Order by created_at, falling back to id if created_at is None
+        try:
+            all_invoices = Invoice.query.filter_by(user_id=user_id).order_by(desc(Invoice.created_at)).all()
+        except Exception:
+            # Fallback to id if created_at causes issues
+            all_invoices = Invoice.query.filter_by(user_id=user_id).order_by(desc(Invoice.id)).all()
         
         customer_invoices_data = []
         for invoice in all_invoices:
@@ -432,10 +465,12 @@ def get_customer_invoices():
             # Get invoice items
             items_data = []
             for item in invoice.items:
+                product = item.product if item.product else None
                 items_data.append({
                     'id': item.id,
                     'product_id': item.product_id,
-                    'product_name': item.product.name if item.product else 'Unknown Product',
+                    'product_name': product.name if product else 'Unknown Product',
+                    'product_name_hindi': product.vegetable_name_hindi if product and hasattr(product, 'vegetable_name_hindi') else None,
                     'quantity': item.quantity,
                     'unit_price': float(item.unit_price),
                     'gst_rate': float(item.gst_rate),
@@ -452,16 +487,16 @@ def get_customer_invoices():
                 'customer_phone': customer.phone if customer else '',
                 'invoice_date': invoice.invoice_date.isoformat() if invoice.invoice_date else '',
                 'due_date': invoice.due_date.isoformat() if invoice.due_date else '',
-                'status': invoice.status,
-                'subtotal': float(invoice.subtotal),
-                'cgst_amount': float(invoice.cgst_amount),
-                'sgst_amount': float(invoice.sgst_amount),
-                'igst_amount': float(invoice.igst_amount),
-                'total_amount': float(invoice.total_amount),
-                'notes': invoice.notes,
+                'status': invoice.status or 'pending',
+                'subtotal': float(invoice.subtotal) if invoice.subtotal is not None else 0.0,
+                'cgst_amount': float(invoice.cgst_amount) if invoice.cgst_amount is not None else 0.0,
+                'sgst_amount': float(invoice.sgst_amount) if invoice.sgst_amount is not None else 0.0,
+                'igst_amount': float(invoice.igst_amount) if invoice.igst_amount is not None else 0.0,
+                'total_amount': float(invoice.total_amount) if invoice.total_amount is not None else 0.0,
+                'notes': invoice.notes or '',
                 'items': items_data,
                 'order_id': invoice.order_id,  # Link to order if generated from order
-                'created_at': invoice.created_at.isoformat()
+                'created_at': invoice.created_at.isoformat() if invoice.created_at else datetime.utcnow().isoformat()
             })
         
         return jsonify({'success': True, 'invoices': customer_invoices_data})
@@ -487,11 +522,30 @@ def api_create_invoice():
         else:
             invoice_number = f"INV-{current_user.id:03d}-1000"
         
-        # Check if customer exists, if not create one
+        # Check if customer exists by ID first, then by name
+        customer_id = data.get('customer_id')
         customer_name = data.get('customer_name', '')
-        customer = Customer.query.filter_by(name=customer_name, user_id=current_user.id).first()
+        customer = None
         
+        # First try to get customer by ID if provided (and not None/null)
+        if customer_id is not None and customer_id != '':
+            try:
+                customer_id_int = int(customer_id)
+                customer = Customer.query.filter_by(id=customer_id_int, user_id=current_user.id).first()
+                if not customer:
+                    print(f"Customer with ID {customer_id_int} not found for user {current_user.id}")
+            except (ValueError, TypeError):
+                print(f"Invalid customer_id: {customer_id}")
+        
+        # If not found by ID, try by name
         if not customer and customer_name:
+            customer = Customer.query.filter_by(name=customer_name, user_id=current_user.id).first()
+            if customer:
+                print(f"Found customer by name: {customer_name} (ID: {customer.id})")
+        
+        # If still not found and customer_name provided, create a new customer
+        if not customer and customer_name:
+            print(f"Creating new customer: {customer_name}")
             customer = Customer(
                 user_id=current_user.id,
                 name=customer_name,
@@ -507,7 +561,7 @@ def api_create_invoice():
             db.session.add(customer)
             db.session.flush()  # Get customer ID
         
-        # If no customer name provided, create a default customer
+        # If no customer at all, create a default customer
         if not customer:
             customer = Customer(
                 user_id=current_user.id,
@@ -524,6 +578,11 @@ def api_create_invoice():
             db.session.add(customer)
             db.session.flush()  # Get customer ID
         
+        # Get status from request, default to 'pending'
+        invoice_status = data.get('status', 'pending')
+        if invoice_status not in ['pending', 'paid', 'cancelled', 'done', 'draft']:
+            invoice_status = 'pending'
+        
         # Create invoice
         invoice = Invoice(
             user_id=current_user.id,
@@ -532,7 +591,7 @@ def api_create_invoice():
             invoice_date=datetime.strptime(data.get('invoice_date', datetime.now().strftime('%Y-%m-%d')), '%Y-%m-%d').date(),
             notes=data.get('notes', ''),
             total_amount=data.get('total_amount', 0),
-            status='pending'
+            status=invoice_status
         )
         
         db.session.add(invoice)
@@ -540,16 +599,44 @@ def api_create_invoice():
         
         # Add invoice items
         items = data.get('items', [])
+        if not items:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': 'No items provided'}), 400
+        
         for item_data in items:
-            # Get product to calculate GST
-            product = Product.query.get(item_data.get('product_id', 0))
-            gst_rate = product.gst_rate if product else 18.0
+            product_id = item_data.get('product_id', 0)
+            if not product_id:
+                print(f"Warning: Item missing product_id: {item_data}")
+                continue
+                
+            # Get product to calculate GST and get customer-specific price
+            product = Product.query.filter_by(id=product_id, user_id=current_user.id).first()
+            if not product:
+                db.session.rollback()
+                return jsonify({'success': False, 'error': f'Product with ID {product_id} not found'}), 400
+            
+            gst_rate = product.gst_rate if product.gst_rate is not None else 18.0
+            
+            # Use customer-specific price if available, otherwise use provided price or product default
+            if product and customer:
+                try:
+                    customer_price = product.get_customer_price(customer.id)
+                    unit_price = customer_price
+                except:
+                    unit_price = item_data.get('unit_price', product.price if product else 0)
+            else:
+                unit_price = item_data.get('unit_price', product.price if product else 0)
+            
+            quantity = item_data.get('quantity', 0)
+            if quantity <= 0:
+                db.session.rollback()
+                return jsonify({'success': False, 'error': f'Invalid quantity for product {product.name}'}), 400
             
             invoice_item = InvoiceItem(
                 invoice_id=invoice.id,
-                product_id=item_data.get('product_id', 0),
-                quantity=item_data.get('quantity', 0),
-                unit_price=item_data.get('unit_price', 0),
+                product_id=product_id,
+                quantity=quantity,
+                unit_price=unit_price,  # Use customer-specific price
                 gst_rate=gst_rate,
                 gst_amount=0,  # Will be calculated
                 total=item_data.get('total', 0)
@@ -559,6 +646,10 @@ def api_create_invoice():
         
         # Calculate invoice totals
         invoice.calculate_totals()
+        
+        # Mark customer as active since they have made a purchase
+        if customer:
+            customer.is_active = True
         
         db.session.commit()
         
@@ -591,10 +682,12 @@ def api_get_invoice(id):
         # Get invoice items
         items = []
         for item in invoice.items:
+            product = item.product if item.product else None
             items.append({
                 'id': item.id,
                 'product_id': item.product_id,
-                'product_name': item.product.name if item.product else 'Unknown Product',
+                'product_name': product.name if product else 'Unknown Product',
+                'product_name_hindi': product.vegetable_name_hindi if product and hasattr(product, 'vegetable_name_hindi') else None,
                 'quantity': item.quantity,
                 'unit_price': float(item.unit_price),
                 'total': float(item.total)
@@ -645,5 +738,46 @@ def api_download_pdf(id):
     
     except Exception as e:
         print(f"Error generating PDF: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@invoice_bp.route('/<int:id>', methods=['PUT', 'PATCH'])
+@login_required
+def api_update_invoice(id):
+    """Update invoice (status, etc.)"""
+    try:
+        invoice = Invoice.query.filter_by(id=id, user_id=current_user.id).first()
+        
+        if not invoice:
+            return jsonify({'success': False, 'error': 'Invoice not found'}), 404
+        
+        data = request.get_json()
+        
+        # Update status if provided
+        if 'status' in data:
+            new_status = data['status']
+            if new_status in ['pending', 'paid', 'cancelled', 'done', 'draft']:
+                invoice.status = new_status
+            else:
+                return jsonify({'success': False, 'error': 'Invalid status'}), 400
+        
+        # Update other fields if provided
+        if 'notes' in data:
+            invoice.notes = data['notes']
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Invoice updated successfully',
+            'invoice': {
+                'id': invoice.id,
+                'invoice_number': invoice.invoice_number,
+                'status': invoice.status
+            }
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error updating invoice: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 

@@ -8,8 +8,8 @@ import os
 import sys
 from flask import Flask
 from config import config
-from database import init_app
-from models import db, User
+from database import init_app, db
+from models import User
 
 def create_app():
     """Create Flask app for setup"""

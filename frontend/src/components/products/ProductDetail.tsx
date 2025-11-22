@@ -34,7 +34,7 @@ const ProductDetail: React.FC = () => {
         
         console.log('Loading product with ID:', id);
         
-        const response = await fetch(`/api/products/${id}`, {
+        const response = await fetch(`https://web-production-84a3.up.railway.app/api/products/${id}`, {
           credentials: 'include'
         });
         

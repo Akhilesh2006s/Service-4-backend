@@ -198,7 +198,7 @@ const InvoiceForm: React.FC = () => {
     console.log('Sending invoice data:', requestData);
 
     try {
-      const response = await fetch('/api/invoices', {
+      const response = await fetch('https://web-production-84a3.up.railway.app/api/invoices', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -348,32 +348,32 @@ const InvoiceForm: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="backdrop-blur-xl bg-white/10 border-b border-white/20 shadow-2xl">
+      <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center">
               <button
                 onClick={() => navigate('/invoices')}
-                className="mr-4 p-2 rounded-2xl bg-white/10 text-white hover:bg-white/20 transition-all duration-300"
+                className="mr-4 p-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
               >
                 <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
               </button>
               <div className="flex-shrink-0">
-                <div className="h-16 w-16 bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg">
+                <div className="h-12 w-12 bg-green-600 rounded-lg flex items-center justify-center">
                   <svg className="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>
               </div>
               <div className="ml-6">
-                <h1 className="text-4xl font-bold text-white">
+                <h1 className="text-2xl font-semibold text-gray-900">
                   {isEditing ? 'Edit Invoice' : 'Create New Invoice'}
                 </h1>
-                <p className="text-gray-300 text-lg">Fill in the details below</p>
+                <p className="text-gray-600 text-sm">Fill in the details below</p>
               </div>
             </div>
           </div>
@@ -381,41 +381,41 @@ const InvoiceForm: React.FC = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form onSubmit={handleSubmit} className="space-y-6">
           {/* Business Information */}
-          <div className="backdrop-blur-xl bg-white/10 rounded-3xl shadow-2xl border border-white/20 p-8">
-            <h2 className="text-2xl font-bold text-white mb-6">Business Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Business Information</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-gray-300 text-sm font-medium mb-2">Business Name</label>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Business Name</label>
                 <input
                   type="text"
                   name="business_name"
                   value={formData.business_name}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                 />
               </div>
               <div>
-                <label className="block text-gray-300 text-sm font-medium mb-2">Business Phone</label>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Business Phone</label>
                 <input
                   type="text"
                   name="business_phone"
                   value={formData.business_phone}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-gray-300 text-sm font-medium mb-2">Business Address</label>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Business Address</label>
                 <textarea
                   name="business_address"
                   value={formData.business_address}
                   onChange={handleChange}
                   rows={3}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                 />
               </div>
@@ -423,39 +423,39 @@ const InvoiceForm: React.FC = () => {
           </div>
 
           {/* Customer Information */}
-          <div className="backdrop-blur-xl bg-white/10 rounded-3xl shadow-2xl border border-white/20 p-8">
-            <h2 className="text-2xl font-bold text-white mb-6">Customer Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Customer Information</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-gray-300 text-sm font-medium mb-2">Customer Name</label>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Customer Name</label>
                 <input
                   type="text"
                   name="customer_name"
                   value={formData.customer_name}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                 />
               </div>
               <div>
-                <label className="block text-gray-300 text-sm font-medium mb-2">Customer Phone</label>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Customer Phone</label>
                 <input
                   type="text"
                   name="customer_phone"
                   value={formData.customer_phone}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-gray-300 text-sm font-medium mb-2">Customer Address</label>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Customer Address</label>
                 <textarea
                   name="customer_address"
                   value={formData.customer_address}
                   onChange={handleChange}
                   rows={3}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                 />
               </div>
@@ -463,66 +463,66 @@ const InvoiceForm: React.FC = () => {
           </div>
 
           {/* Invoice Details */}
-          <div className="backdrop-blur-xl bg-white/10 rounded-3xl shadow-2xl border border-white/20 p-8">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-white">Invoice Items</h2>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Invoice Items</h2>
               <button
                 type="button"
                 onClick={addItem}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-2xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 shadow-lg"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
               >
-                <svg className="h-5 w-5 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
-                Add Item
+                <span>Add Item</span>
               </button>
             </div>
 
             {formData.items.map((item, index) => (
-              <div key={index} className="backdrop-blur-xl bg-white/5 rounded-2xl p-6 mb-4 border border-white/10">
+              <div key={index} className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-200">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-gray-300 text-sm font-medium mb-2">Product</label>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Product</label>
                     <button
                       type="button"
                       onClick={() => selectProduct(index)}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white text-left hover:bg-white/20 transition-all duration-300"
+                      className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-left hover:bg-gray-50 transition-colors"
                     >
                       {item.product ? item.product.name : 'Select Product'}
                     </button>
                   </div>
                   <div>
-                    <label className="block text-gray-300 text-sm font-medium mb-2">Quantity</label>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Quantity</label>
                     <input
                       type="number"
                       value={item.quantity}
                       onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
                       min="1"
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
                   <div>
-                    <label className="block text-gray-300 text-sm font-medium mb-2">Unit Price</label>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">Unit Price</label>
                     <input
                       type="number"
                       value={item.unit_price}
                       onChange={(e) => updateItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
                       min="0"
                       step="0.01"
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
                   <div className="flex items-end space-x-2">
                     <div className="flex-1">
-                      <label className="block text-gray-300 text-sm font-medium mb-2">Total</label>
-                      <div className="px-4 py-3 bg-white/5 border border-white/20 rounded-2xl text-white">
+                      <label className="block text-gray-700 text-sm font-medium mb-2">Total</label>
+                      <div className="px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900">
                         ₹{item.total.toFixed(2)}
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => removeItem(index)}
-                      className="p-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl transition-all duration-300"
+                      className="p-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
                     >
                       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -535,19 +535,19 @@ const InvoiceForm: React.FC = () => {
 
             {formData.items.length === 0 && (
               <div className="text-center py-12">
-                <div className="h-16 w-16 bg-gradient-to-r from-gray-400 to-gray-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <svg className="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="h-16 w-16 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                  <svg className="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>
-                <p className="text-gray-300 text-lg">No items added yet</p>
-                <p className="text-gray-400">Click "Add Item" to start building your invoice</p>
+                <p className="text-gray-600 text-base">No items added yet</p>
+                <p className="text-gray-500 text-sm">Click "Add Item" to start building your invoice</p>
               </div>
             )}
 
             {formData.items.length > 0 && (
               <div className="mt-6 text-right">
-                <div className="text-2xl font-bold text-white">
+                <div className="text-xl font-bold text-gray-900">
                   Total: ₹{calculateTotal().toFixed(2)}
                 </div>
               </div>
@@ -555,41 +555,41 @@ const InvoiceForm: React.FC = () => {
           </div>
 
           {/* Custom Columns */}
-          <div className="backdrop-blur-xl bg-white/10 rounded-3xl shadow-2xl border border-white/20 p-8">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-white">Custom Columns</h2>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Custom Columns</h2>
               <button
                 type="button"
                 onClick={addCustomColumn}
-                className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-2 rounded-2xl font-semibold hover:from-purple-700 hover:to-pink-700 transition-all duration-300 transform hover:scale-105 shadow-lg"
+                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
               >
-                <svg className="h-5 w-5 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
-                Add Column
+                <span>Add Column</span>
               </button>
             </div>
             
             {Object.keys(customColumns).length === 0 ? (
               <div className="text-center py-8">
-                <div className="h-16 w-16 bg-gradient-to-r from-gray-400 to-gray-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <svg className="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="h-16 w-16 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                  <svg className="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>
-                <p className="text-gray-300 text-lg">No custom columns added</p>
-                <p className="text-gray-400">Click "Add Column" to add custom fields to your invoice</p>
+                <p className="text-gray-600 text-base">No custom columns added</p>
+                <p className="text-gray-500 text-sm">Click "Add Column" to add custom fields to your invoice</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Object.entries(customColumns).map(([key, value]) => (
-                  <div key={key} className="backdrop-blur-xl bg-white/5 rounded-2xl p-4 border border-white/10">
+                  <div key={key} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                     <div className="flex items-center justify-between mb-2">
-                      <label className="block text-gray-300 text-sm font-medium">{key}</label>
+                      <label className="block text-gray-700 text-sm font-medium">{key}</label>
                       <button
                         type="button"
                         onClick={() => removeCustomColumn(key)}
-                        className="p-1 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all duration-300"
+                        className="p-1 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
                       >
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -600,7 +600,7 @@ const InvoiceForm: React.FC = () => {
                       type="text"
                       value={value}
                       onChange={(e) => handleCustomColumnChange(key, e.target.value)}
-                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder={`Enter ${key}`}
                     />
                   </div>
@@ -610,28 +610,28 @@ const InvoiceForm: React.FC = () => {
           </div>
 
           {/* Additional Information */}
-          <div className="backdrop-blur-xl bg-white/10 rounded-3xl shadow-2xl border border-white/20 p-8">
-            <h2 className="text-2xl font-bold text-white mb-6">Additional Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Additional Information</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-gray-300 text-sm font-medium mb-2">Invoice Date</label>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Invoice Date</label>
                 <input
                   type="date"
                   name="invoice_date"
                   value={formData.invoice_date}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                 />
               </div>
               <div>
-                <label className="block text-gray-300 text-sm font-medium mb-2">Notes</label>
+                <label className="block text-gray-700 text-sm font-medium mb-2">Notes</label>
                 <textarea
                   name="notes"
                   value={formData.notes}
                   onChange={handleChange}
                   rows={3}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
             </div>
@@ -642,31 +642,31 @@ const InvoiceForm: React.FC = () => {
             <button
               type="button"
               onClick={() => navigate('/invoices')}
-              className="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-8 py-4 rounded-2xl font-semibold hover:from-gray-700 hover:to-gray-800 transition-all duration-300 transform hover:scale-105 shadow-lg"
+              className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-2.5 rounded-lg text-sm font-medium transition-colors"
             >
               Cancel
             </button>
-                         <div className="flex space-x-4">
-               <button
-                 type="button"
-                 onClick={handlePreview}
-                 className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-4 rounded-2xl font-semibold hover:from-purple-700 hover:to-pink-700 transition-all duration-300 transform hover:scale-105 shadow-lg"
-               >
-                 Preview
-               </button>
-               <button
-                 type="button"
-                 onClick={downloadPDF}
-                 disabled={formData.items.length === 0}
-                 className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 rounded-2xl font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all duration-300 transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-               >
-                 Download PDF
-               </button>
-               <button
-                 type="submit"
-                 disabled={loading || formData.items.length === 0}
-                 className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-8 py-4 rounded-2xl font-semibold hover:from-green-700 hover:to-emerald-700 transition-all duration-300 transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-               >
+            <div className="flex space-x-3">
+              <button
+                type="button"
+                onClick={handlePreview}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              >
+                Preview
+              </button>
+              <button
+                type="button"
+                onClick={downloadPDF}
+                disabled={formData.items.length === 0}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Download PDF
+              </button>
+              <button
+                type="submit"
+                disabled={loading || formData.items.length === 0}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                  {loading ? 'Creating...' : 'Create Invoice'}
                </button>
              </div>

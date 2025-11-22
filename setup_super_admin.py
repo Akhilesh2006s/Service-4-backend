@@ -10,7 +10,8 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from app import create_app
-from models import db, SuperAdmin
+from database import db
+from models import SuperAdmin
 
 def create_super_admin():
     """Create the super admin user"""
@@ -18,25 +19,30 @@ def create_super_admin():
     
     with app.app_context():
         # Check if super admin already exists
-        existing_super_admin = SuperAdmin.query.filter_by(email='akhileshsamayamanthula@gmail.com').first()
+        existing_super_admin = SuperAdmin.query.filter_by(email='madhavchelluri57@gmail.com').first()
         
         if existing_super_admin:
-            print("Super admin already exists!")
+            # Update password if exists
+            existing_super_admin.set_password('12345678')
+            db.session.commit()
+            print("Super admin already exists! Password updated.")
+            print("Email: madhavchelluri57@gmail.com")
+            print("Password: 12345678")
             return
         
         # Create super admin
         super_admin = SuperAdmin(
-            email='akhileshsamayamanthula@gmail.com',
-            name='Akhilesh Samayamanthula'
+            email='madhavchelluri57@gmail.com',
+            name='Super Admin'
         )
-        super_admin.set_password('Akhilesh')
+        super_admin.set_password('12345678')
         
         db.session.add(super_admin)
         db.session.commit()
         
         print("Super admin created successfully!")
-        print("Email: akhileshsamayamanthula@gmail.com")
-        print("Password: Akhilesh")
+        print("Email: madhavchelluri57@gmail.com")
+        print("Password: 12345678")
 
 if __name__ == '__main__':
     create_super_admin()

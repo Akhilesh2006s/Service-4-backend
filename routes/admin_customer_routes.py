@@ -190,20 +190,37 @@ def update_customer(customer_id):
 @admin_customer_bp.route('/customers/<int:customer_id>', methods=['DELETE'])
 @login_required
 def delete_customer(customer_id):
-    """Delete customer (soft delete)"""
+    """Delete customer (hard delete)"""
     try:
         customer = Customer.query.filter_by(
-            id=customer_id, user_id=current_user.id, is_active=True
+            id=customer_id, user_id=current_user.id
         ).first()
         
         if not customer:
             return jsonify({'success': False, 'message': 'Customer not found'}), 404
         
+        # Check if customer has invoices
+        if customer.invoices:
+            return jsonify({
+                'success': False, 
+                'message': 'Cannot delete customer with existing invoices. Please delete related invoices first.'
+            }), 400
+        
         # Check if customer has orders
         if customer.orders:
-            return jsonify({'success': False, 'message': 'Cannot delete customer with existing orders'}), 400
+            return jsonify({
+                'success': False, 
+                'message': 'Cannot delete customer with existing orders. Please delete related orders first.'
+            }), 400
         
-        customer.is_active = False
+        # Check if customer has product prices
+        if customer.product_prices:
+            # Delete customer product prices first
+            for price in customer.product_prices:
+                db.session.delete(price)
+        
+        # Hard delete the customer
+        db.session.delete(customer)
         db.session.commit()
         
         return jsonify({'success': True, 'message': 'Customer deleted successfully!'})

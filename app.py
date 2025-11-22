@@ -24,24 +24,32 @@ from routes.report_routes import report_bp
 from routes.customer_auth_routes import customer_auth_bp
 from routes.super_admin_routes import super_admin_bp
 from routes.admin_routes import admin_bp
+from routes.import_export_routes import import_export_bp
 
 def create_app(config_name='development'):
     app = Flask(__name__, static_folder='frontend/dist', template_folder='frontend/dist')
     app.config.from_object(config[config_name])
     
     # Enable CORS for API routes with credentials support
+    # Get allowed origins from environment or use defaults
+    cors_origins = os.environ.get('CORS_ORIGINS', '').split(',') if os.environ.get('CORS_ORIGINS') else [
+        "http://localhost:3000",
+        "http://localhost:5173", 
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        "https://web-production-84a3.up.railway.app"
+    ]
+    # Filter out empty strings
+    cors_origins = [origin.strip() for origin in cors_origins if origin.strip()]
+    
     CORS(app, resources={
         r"/api/*": {
-            "origins": [
-                "http://localhost:3000",
-                "http://localhost:5173", 
-                "http://127.0.0.1:3000",
-                "http://127.0.0.1:5173",
-                "https://web-production-84a3.up.railway.app"
-            ], 
+            "origins": cors_origins,
             "supports_credentials": True,
-            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization"]
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+            "allow_headers": ["Content-Type", "Authorization", "Origin", "Accept", "X-Requested-With"],
+            "expose_headers": ["Content-Type", "Authorization"],
+            "max_age": 86400
         }
     })
     
@@ -49,26 +57,131 @@ def create_app(config_name='development'):
     db.init_app(app)
     migrate.init_app(app, db)
     
+    # Ensure database tables exist and vegetable columns are added
+    with app.app_context():
+        try:
+            # Create all tables
+            db.create_all()
+            
+            # Initialize vegetable columns using helper function
+            try:
+                from init_database import init_database_columns
+                init_database_columns(db, app)
+            except ImportError:
+                # If helper doesn't exist, do it inline
+                try:
+                    result = db.session.execute(db.text("PRAGMA table_info(product)")).fetchall()
+                    existing_columns = [row[1] for row in result] if result else []
+                    
+                    vegetable_columns = {
+                        'vegetable_name': 'VARCHAR(200)',
+                        'vegetable_name_hindi': 'VARCHAR(200)',
+                        'quantity_gm': 'REAL',
+                        'quantity_kg': 'REAL',
+                        'rate_per_gm': 'REAL',
+                        'rate_per_kg': 'REAL'
+                    }
+                    
+                    for col_name, col_type in vegetable_columns.items():
+                        if col_name not in existing_columns:
+                            try:
+                                db.session.execute(db.text(f"ALTER TABLE product ADD COLUMN {col_name} {col_type}"))
+                            except Exception as e:
+                                if 'duplicate' not in str(e).lower() and 'already exists' not in str(e).lower():
+                                    print(f"[WARNING] Could not add column {col_name}: {e}")
+                    
+                    db.session.commit()
+                except Exception as e:
+                    db.session.rollback()
+                    print(f"[INFO] Database column check: {e}")
+        except Exception as e:
+            print(f"[WARNING] Database initialization warning: {e}")
+            # Don't fail app startup if migration fails
+    
     # Initialize login manager
     login_manager = LoginManager()
     login_manager.init_app(app)
     login_manager.login_view = None  # Disable redirect for API routes
     
+    # Public routes that don't require authentication
+    PUBLIC_ROUTES = [
+        '/api/auth/login',
+        '/api/auth/register',
+        '/api/customer-auth/login',
+        '/api/customer-auth/register',
+        '/api/super-admin/login',
+        '/api/auth/check',
+        '/health',
+        '/'
+    ]
+    
+    # Handle unauthorized access for API routes (return JSON instead of redirect)
+    @login_manager.unauthorized_handler
+    def unauthorized():
+        # Allow OPTIONS requests to pass through for CORS preflight
+        if request.method == 'OPTIONS':
+            return '', 200
+        
+        # This handler is only called for routes with @login_required
+        # Public routes should never reach here
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    
+    # Allow OPTIONS requests and public routes to bypass authentication for CORS preflight
+    @app.before_request
+    def handle_preflight():
+        # Allow OPTIONS requests
+        if request.method == "OPTIONS":
+            response = jsonify({'status': 'ok'})
+            response.headers.add("Access-Control-Allow-Origin", request.headers.get('Origin', '*'))
+            response.headers.add('Access-Control-Allow-Headers', "Content-Type,Authorization,Origin,Accept,X-Requested-With")
+            response.headers.add('Access-Control-Allow-Methods', "GET,POST,PUT,DELETE,OPTIONS,PATCH")
+            response.headers.add('Access-Control-Allow-Credentials', "true")
+            response.headers.add('Access-Control-Max-Age', "86400")
+            return response
+        
+        # Public routes don't need authentication checks
+        if request.path in PUBLIC_ROUTES:
+            return None
+    
     @login_manager.user_loader
     def load_user(user_id):
-        # Try to load super admin first, then admin user, then customer
-        from models import SuperAdmin
-        super_admin = SuperAdmin.query.get(int(user_id))
+        if not user_id:
+            return None
+        
+        from models import SuperAdmin, Customer
+        
+        # Support new prefixed IDs first
+        if user_id.startswith('superadmin-'):
+            try:
+                return SuperAdmin.query.get(int(user_id.split('-', 1)[1]))
+            except (ValueError, IndexError):
+                return None
+        if user_id.startswith('user-'):
+            try:
+                return User.query.get(int(user_id.split('-', 1)[1]))
+            except (ValueError, IndexError):
+                return None
+        if user_id.startswith('customer-'):
+            try:
+                return Customer.query.get(int(user_id.split('-', 1)[1]))
+            except (ValueError, IndexError):
+                return None
+        
+        # Backward compatibility for older sessions without prefixes
+        try:
+            numeric_id = int(user_id)
+        except (ValueError, TypeError):
+            return None
+        
+        super_admin = SuperAdmin.query.get(numeric_id)
         if super_admin:
             return super_admin
         
-        user = User.query.get(int(user_id))
+        user = User.query.get(numeric_id)
         if user:
             return user
         
-        from models import Customer
-        customer = Customer.query.get(int(user_id))
-        return customer
+        return Customer.query.get(numeric_id)
     
     # Register blueprints
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -81,6 +194,7 @@ def create_app(config_name='development'):
     app.register_blueprint(customer_auth_bp, url_prefix='/api/customer-auth')
     app.register_blueprint(super_admin_bp, url_prefix='/api/super-admin')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
+    app.register_blueprint(import_export_bp, url_prefix='/api')
     
     # PDF Generation endpoint
     @app.route('/api/generate-pdf', methods=['POST'])
@@ -240,16 +354,28 @@ def create_app(config_name='development'):
     
     return app
 
+# Export db for scripts that need it
+# Note: db must be initialized with an app before use
+__all__ = ['create_app', 'db']
+
 if __name__ == '__main__':
     app = create_app()
     app.run(debug=True, host='0.0.0.0', port=5000)
 
-# Create app instance for Railway
+# Create app instance for Railway/Gunicorn
+# Determine config based on environment
+import os
+config_name = os.environ.get('FLASK_ENV', 'development')
+if config_name == 'production' or os.environ.get('RAILWAY_ENVIRONMENT'):
+    config_name = 'production'
+
 try:
-    app = create_app('production')
-    print("✅ App created successfully")
+    app = create_app(config_name)
+    print(f"[OK] App created successfully with config: {config_name}")
 except Exception as e:
-    print(f"❌ Error creating app: {e}")
+    print(f"[ERROR] Error creating app: {e}")
+    import traceback
+    traceback.print_exc()
     # Create a minimal app for healthcheck
     app = Flask(__name__)
     

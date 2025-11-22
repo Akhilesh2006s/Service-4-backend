@@ -3,7 +3,8 @@
 Test script to generate an invoice from an order
 """
 from app import create_app
-from models import db, Order, Invoice, InvoiceItem
+from database import db
+from models import Order, Invoice, InvoiceItem
 from datetime import datetime, timedelta
 import uuid
 
