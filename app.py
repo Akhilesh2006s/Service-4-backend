@@ -58,45 +58,51 @@ def create_app(config_name='development'):
     migrate.init_app(app, db)
     
     # Ensure database tables exist and vegetable columns are added
-    with app.app_context():
+    # Do this in a non-blocking way to allow health checks to work
+    def init_database():
         try:
-            # Create all tables
-            db.create_all()
-            
-            # Initialize vegetable columns using helper function
-            try:
-                from init_database import init_database_columns
-                init_database_columns(db, app)
-            except ImportError:
-                # If helper doesn't exist, do it inline
+            with app.app_context():
+                # Create all tables
+                db.create_all()
+                
+                # Initialize vegetable columns using helper function
                 try:
-                    result = db.session.execute(db.text("PRAGMA table_info(product)")).fetchall()
-                    existing_columns = [row[1] for row in result] if result else []
-                    
-                    vegetable_columns = {
-                        'vegetable_name': 'VARCHAR(200)',
-                        'vegetable_name_hindi': 'VARCHAR(200)',
-                        'quantity_gm': 'REAL',
-                        'quantity_kg': 'REAL',
-                        'rate_per_gm': 'REAL',
-                        'rate_per_kg': 'REAL'
-                    }
-                    
-                    for col_name, col_type in vegetable_columns.items():
-                        if col_name not in existing_columns:
-                            try:
-                                db.session.execute(db.text(f"ALTER TABLE product ADD COLUMN {col_name} {col_type}"))
-                            except Exception as e:
-                                if 'duplicate' not in str(e).lower() and 'already exists' not in str(e).lower():
-                                    print(f"[WARNING] Could not add column {col_name}: {e}")
-                    
-                    db.session.commit()
-                except Exception as e:
-                    db.session.rollback()
-                    print(f"[INFO] Database column check: {e}")
+                    from init_database import init_database_columns
+                    init_database_columns(db, app)
+                except ImportError:
+                    # If helper doesn't exist, do it inline
+                    try:
+                        result = db.session.execute(db.text("PRAGMA table_info(product)")).fetchall()
+                        existing_columns = [row[1] for row in result] if result else []
+                        
+                        vegetable_columns = {
+                            'vegetable_name': 'VARCHAR(200)',
+                            'vegetable_name_hindi': 'VARCHAR(200)',
+                            'quantity_gm': 'REAL',
+                            'quantity_kg': 'REAL',
+                            'rate_per_gm': 'REAL',
+                            'rate_per_kg': 'REAL'
+                        }
+                        
+                        for col_name, col_type in vegetable_columns.items():
+                            if col_name not in existing_columns:
+                                try:
+                                    db.session.execute(db.text(f"ALTER TABLE product ADD COLUMN {col_name} {col_type}"))
+                                except Exception as e:
+                                    if 'duplicate' not in str(e).lower() and 'already exists' not in str(e).lower():
+                                        print(f"[WARNING] Could not add column {col_name}: {e}")
+                        
+                        db.session.commit()
+                    except Exception as e:
+                        db.session.rollback()
+                        print(f"[INFO] Database column check: {e}")
         except Exception as e:
             print(f"[WARNING] Database initialization warning: {e}")
             # Don't fail app startup if migration fails
+    
+    # Initialize database in background (non-blocking)
+    import threading
+    threading.Thread(target=init_database, daemon=True).start()
     
     # Initialize login manager
     login_manager = LoginManager()
@@ -329,17 +335,24 @@ def create_app(config_name='development'):
         except Exception as e:
             return jsonify({'error': str(e)}), 500
     
-    # Serve React app (only for production)
-    @app.route('/')
-    def health_check():
-        """Simple health check endpoint"""
-        return jsonify({'status': 'healthy', 'message': 'GST Billing System API is running'})
-
     @app.route('/health')
     def health():
         """Health check endpoint for Railway"""
-        return jsonify({'status': 'healthy', 'message': 'GST Billing System API is running'})
+        try:
+            # Quick database connectivity check (non-blocking)
+            with app.app_context():
+                db.session.execute(db.text('SELECT 1'))
+            db_status = 'connected'
+        except Exception as e:
+            db_status = f'warning: {str(e)[:50]}'
+        
+        return jsonify({
+            'status': 'healthy', 
+            'message': 'GST Billing System API is running',
+            'database': db_status
+        }), 200
 
+    # Serve React app
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')
     def serve(path):
@@ -370,8 +383,16 @@ if config_name == 'production' or os.environ.get('RAILWAY_ENVIRONMENT'):
     config_name = 'production'
 
 try:
+    import os
+    port = os.environ.get('PORT', '5000')
+    print(f"[INFO] Starting app with config: {config_name}")
+    print(f"[INFO] Port: {port}")
+    print(f"[INFO] Railway Environment: {os.environ.get('RAILWAY_ENVIRONMENT', 'Not set')}")
+    
     app = create_app(config_name)
     print(f"[OK] App created successfully with config: {config_name}")
+    print(f"[OK] Health endpoint available at /health")
+    print(f"[OK] App ready to serve requests")
 except Exception as e:
     print(f"[ERROR] Error creating app: {e}")
     import traceback
@@ -381,8 +402,10 @@ except Exception as e:
     
     @app.route('/health')
     def health():
-        return jsonify({'status': 'healthy', 'message': 'GST Billing System API is running'})
+        return jsonify({'status': 'healthy', 'message': 'GST Billing System API is running (minimal mode)'}), 200
     
     @app.route('/')
     def health_check():
-        return jsonify({'status': 'healthy', 'message': 'GST Billing System API is running'})
+        return jsonify({'status': 'healthy', 'message': 'GST Billing System API is running (minimal mode)'}), 200
+    
+    print(f"[WARNING] Running in minimal mode - health checks only")
