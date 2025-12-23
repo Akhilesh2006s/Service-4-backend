@@ -26,10 +26,10 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Determine cookie flags based on frontend origin
-const isFrontendHttps = allowedOrigin.startsWith('https://');
-const sessionCookieSameSite = isFrontendHttps ? 'none' : 'lax';
-const sessionCookieSecure = isFrontendHttps; // must be true when sameSite is none
+// Determine cookie flags: in production (Railway HTTPS), allow cross-site cookies
+const isProduction = process.env.NODE_ENV === 'production';
+const sessionCookieSameSite = isProduction ? 'none' : 'lax';
+const sessionCookieSecure = isProduction; // Secure is required when sameSite is none
 
 // Session configuration
 app.use(session({
