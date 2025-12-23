@@ -1,1 +1,0 @@
-# Backend runs on Node.js; no Python dependencies required.
