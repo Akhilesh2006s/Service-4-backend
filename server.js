@@ -20,6 +20,7 @@ const allowedOrigins = [
   'http://localhost:3001',
   'http://localhost:3000',
   'https://web-production-f50e6.up.railway.app',
+  'https://okok-pied-omega.vercel.app',
 ].filter(Boolean);
 
 const corsOptions = {
@@ -31,7 +32,9 @@ const corsOptions = {
     return callback(new Error('Not allowed by CORS'), false);
   },
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
 // Middleware
