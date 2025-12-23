@@ -14,9 +14,22 @@ app.set('trust proxy', 1);
 connectDB();
 
 // CORS configuration
-const allowedOrigin = process.env.FRONTEND_URL || 'http://localhost:3001';
+const frontendEnv = process.env.FRONTEND_URL;
+const allowedOrigins = [
+  frontendEnv,
+  'http://localhost:3001',
+  'http://localhost:3000',
+  'https://web-production-f50e6.up.railway.app',
+].filter(Boolean);
+
 const corsOptions = {
-  origin: allowedOrigin,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl) or if in the whitelist
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'), false);
+  },
   credentials: true,
   optionsSuccessStatus: 200
 };
@@ -36,6 +49,7 @@ app.use(session({
   secret: process.env.JWT_SECRET || process.env.SESSION_SECRET || 'gst-billing-secret-key-change-in-production',
   resave: false,
   saveUninitialized: false,
+  proxy: true, // ensure secure cookies work behind proxy
   cookie: {
     secure: sessionCookieSecure,
     httpOnly: true,
