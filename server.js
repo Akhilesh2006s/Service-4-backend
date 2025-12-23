@@ -26,16 +26,20 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Determine cookie flags based on frontend origin
+const isFrontendHttps = allowedOrigin.startsWith('https://');
+const sessionCookieSameSite = isFrontendHttps ? 'none' : 'lax';
+const sessionCookieSecure = isFrontendHttps; // must be true when sameSite is none
+
 // Session configuration
 app.use(session({
   secret: process.env.JWT_SECRET || process.env.SESSION_SECRET || 'gst-billing-secret-key-change-in-production',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: sessionCookieSecure,
     httpOnly: true,
-    // Required to allow cross-site cookies when frontend and backend are on different domains
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    sameSite: sessionCookieSameSite,
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
 }));
