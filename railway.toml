@@ -1,0 +1,9 @@
+[build]
+# Point Railway/Nixpacks to the Node backend directory
+root = "backend"
+builder = "NIXPACKS"
+
+[deploy]
+# Start the Express server
+startCommand = "npm start"
+
